@@ -30,7 +30,7 @@ priority = "default"
 [[tool.poetry.source]]
 name = "torch_cu118"
 url = "https://download.pytorch.org/whl/cu118"
-priority = "primary"
+priority = "supplemental"
 
 [build-system]
 requires = ["poetry-core"]
