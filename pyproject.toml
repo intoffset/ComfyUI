@@ -3,12 +3,120 @@ name = "ComfyUI"
 version = "0.3.65"
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = ">=3.9"
+requires-python = ">=3.12"
+dependencies = [
+    "comfyui-frontend-package==1.28.7",
+    "comfyui-workflow-templates==0.1.95",
+    "comfyui-embedded-docs==0.3.0",
+    "torchsde",
+    "numpy>=1.25.0",
+    "einops",
+    "transformers>=4.37.2",
+    "tokenizers>=0.13.3",
+    "sentencepiece",
+    "safetensors>=0.4.2",
+    "aiohttp>=3.11.8",
+    "yarl>=1.18.0",
+    "pyyaml",
+    "Pillow",
+    "scipy",
+    "tqdm",
+    "psutil",
+    "alembic",
+    "SQLAlchemy",
+    "av>=14.2.0",
+    "kornia>=0.7.1",
+    "spandrel",
+    "pydantic~=2.0",
+    "pydantic-settings~=2.0",
+]
+
+[project.optional-dependencies]
+cpu = [
+    "torch>=2.5.0",
+    "torchvision>=0.20.0",
+    "torchaudio>=2.5.0",
+]
+
+cu130 = [
+    "torch>=2.5.0",
+    "torchvision>=0.20.0",
+    "torchaudio>=2.5.0",
+]
+
+cu126 = [
+    "torch>=2.5.0",
+    "torchvision>=0.20.0",
+    "torchaudio>=2.5.0",
+]
+
+cu124 = [
+    "torch>=2.5.0",
+    "torchvision>=0.20.0",
+    "torchaudio>=2.5.0",
+]
+
+cu121 = [
+    "torch>=2.4.0",
+    "torchvision>=0.19.0",
+    "torchaudio>=2.4.0",
+]
 
 [project.urls]
 homepage = "https://www.comfy.org/"
 repository = "https://github.com/comfyanonymous/ComfyUI"
 documentation = "https://docs.comfy.org/"
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "cpu" },
+        { extra = "cu130" },
+        { extra = "cu126" },
+        { extra = "cu124" },
+        { extra = "cu121" },
+    ],
+]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cu130", extra = "cu130" },
+    { index = "pytorch-cu126", extra = "cu126" },
+    { index = "pytorch-cu124", extra = "cu124" },
+    { index = "pytorch-cu121", extra = "cu121" },
+]
+torchvision = [
+    { index = "pytorch-cu130", extra = "cu130" },
+    { index = "pytorch-cu126", extra = "cu126" },
+    { index = "pytorch-cu124", extra = "cu124" },
+    { index = "pytorch-cu121", extra = "cu121" },
+]
+torchaudio = [
+    { index = "pytorch-cu130", extra = "cu130" },
+    { index = "pytorch-cu126", extra = "cu126" },
+    { index = "pytorch-cu124", extra = "cu124" },
+    { index = "pytorch-cu121", extra = "cu121" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu121"
+url = "https://download.pytorch.org/whl/cu121"
+explicit = true
 
 [tool.ruff]
 lint.select = [
