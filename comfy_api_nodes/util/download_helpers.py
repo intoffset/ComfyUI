@@ -3,22 +3,24 @@ import contextlib
 import uuid
 from io import BytesIO
 from pathlib import Path
-from typing import IO, Optional, Union
+from typing import IO
 from urllib.parse import urljoin, urlparse
 
 import aiohttp
 import torch
 from aiohttp.client_exceptions import ClientError, ContentTypeError
 
-from comfy_api.input_impl import VideoFromFile
 from comfy_api.latest import IO as COMFY_IO
-from comfy_api_nodes.apis import request_logger
+from comfy_api.latest import InputImpl, Types
+from folder_paths import get_output_directory
 
+from . import request_logger
 from ._helpers import (
     default_base_url,
     get_auth_header,
     is_processing_interrupted,
     sleep_with_interrupt,
+    to_aiohttp_url,
 )
 from .client import _diagnose_connectivity
 from .common_exceptions import ApiServerError, LocalNetworkError, ProcessingInterrupted
@@ -29,10 +31,10 @@ _RETRY_STATUS = {408, 429, 500, 502, 503, 504}
 
 async def download_url_to_bytesio(
     url: str,
-    dest: Optional[Union[BytesIO, IO[bytes], str, Path]],
+    dest: BytesIO | IO[bytes] | str | Path | None,
     *,
-    timeout: Optional[float] = None,
-    max_retries: int = 3,
+    timeout: float | None = None,
+    max_retries: int = 5,
     retry_delay: float = 1.0,
     retry_backoff: float = 2.0,
     cls: type[COMFY_IO.ComfyNode] = None,
@@ -71,10 +73,10 @@ async def download_url_to_bytesio(
 
         is_path_sink = isinstance(dest, (str, Path))
         fhandle = None
-        session: Optional[aiohttp.ClientSession] = None
-        stop_evt: Optional[asyncio.Event] = None
-        monitor_task: Optional[asyncio.Task] = None
-        req_task: Optional[asyncio.Task] = None
+        session: aiohttp.ClientSession | None = None
+        stop_evt: asyncio.Event | None = None
+        monitor_task: asyncio.Task | None = None
+        req_task: asyncio.Task | None = None
 
         try:
             with contextlib.suppress(Exception):
@@ -94,7 +96,7 @@ async def download_url_to_bytesio(
 
             monitor_task = asyncio.create_task(_monitor())
 
-            req_task = asyncio.create_task(session.get(url, headers=headers))
+            req_task = asyncio.create_task(session.get(to_aiohttp_url(url), headers=headers))
             done, pending = await asyncio.wait({req_task, monitor_task}, return_when=asyncio.FIRST_COMPLETED)
 
             if monitor_task in done and req_task in pending:
@@ -177,7 +179,7 @@ async def download_url_to_bytesio(
                 return
         except asyncio.CancelledError:
             raise ProcessingInterrupted("Task cancelled") from None
-        except (ClientError, asyncio.TimeoutError) as e:
+        except (ClientError, OSError) as e:
             if attempt <= max_retries:
                 with contextlib.suppress(Exception):
                     request_logger.log_request_response(
@@ -191,7 +193,7 @@ async def download_url_to_bytesio(
                 continue
 
             diag = await _diagnose_connectivity()
-            if diag.get("is_local_issue"):
+            if not diag["internet_accessible"]:
                 raise LocalNetworkError(
                     "Unable to connect to the network. Please check your internet connection and try again."
                 ) from e
@@ -232,12 +234,13 @@ async def download_url_to_video_output(
     video_url: str,
     *,
     timeout: float = None,
+    max_retries: int = 5,
     cls: type[COMFY_IO.ComfyNode] = None,
-) -> VideoFromFile:
+) -> InputImpl.VideoFromFile:
     """Downloads a video from a URL and returns a `VIDEO` output."""
     result = BytesIO()
-    await download_url_to_bytesio(video_url, result, timeout=timeout, cls=cls)
-    return VideoFromFile(result)
+    await download_url_to_bytesio(video_url, result, timeout=timeout, max_retries=max_retries, cls=cls)
+    return InputImpl.VideoFromFile(result)
 
 
 async def download_url_as_bytesio(
@@ -259,3 +262,38 @@ def _generate_operation_id(method: str, url: str, attempt: int) -> str:
     except Exception:
         slug = "download"
     return f"{method}_{slug}_try{attempt}_{uuid.uuid4().hex[:8]}"
+
+
+async def download_url_to_file_3d(
+    url: str,
+    file_format: str,
+    *,
+    task_id: str | None = None,
+    timeout: float | None = None,
+    max_retries: int = 5,
+    cls: type[COMFY_IO.ComfyNode] = None,
+) -> Types.File3D:
+    """Downloads a 3D model file from a URL into memory as BytesIO.
+
+    If task_id is provided, also writes the file to disk in the output directory
+    for backward compatibility with the old save-to-disk behavior.
+    """
+    file_format = file_format.lstrip(".").lower()
+    data = BytesIO()
+    await download_url_to_bytesio(
+        url,
+        data,
+        timeout=timeout,
+        max_retries=max_retries,
+        cls=cls,
+    )
+
+    if task_id is not None:
+        # This is only for backward compatability with current behavior when every 3D node is output node
+        # All new API nodes should not use "task_id" and instead users should use "SaveGLB" node to save results
+        output_dir = Path(get_output_directory())
+        output_path = output_dir / f"{task_id}.{file_format}"
+        output_path.write_bytes(data.getvalue())
+        data.seek(0)
+
+    return Types.File3D(source=data, file_format=file_format)
